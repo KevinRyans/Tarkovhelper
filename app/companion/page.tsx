@@ -1,11 +1,40 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 
 import { CompanionSetupCard } from "@/components/companion/companion-setup-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerAuthSession } from "@/lib/auth/session";
+import { env } from "@/lib/config/env";
+
+function stripTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+async function resolveApiBaseUrl() {
+  if (env.NEXTAUTH_URL) {
+    return stripTrailingSlash(env.NEXTAUTH_URL);
+  }
+
+  const incomingHeaders = await headers();
+  const forwardedHost = incomingHeaders.get("x-forwarded-host");
+  const forwardedProto = incomingHeaders.get("x-forwarded-proto");
+  const host = incomingHeaders.get("host");
+
+  if (forwardedHost) {
+    return `${forwardedProto ?? "https"}://${forwardedHost}`;
+  }
+
+  if (host) {
+    const protocol = host.includes("localhost") || host.startsWith("127.") ? "http" : "https";
+    return `${protocol}://${host}`;
+  }
+
+  return "http://localhost:3000";
+}
 
 export default async function CompanionPage() {
   const session = await getServerAuthSession();
+  const apiBaseUrl = await resolveApiBaseUrl();
 
   if (!session?.user?.id) {
     return (
@@ -47,7 +76,7 @@ export default async function CompanionPage() {
           <CardContent className="space-y-2 text-sm">
             <p>1. Generate token in the card above.</p>
             <p>2. Download script: <code>tarkov-helper-companion.ps1</code>.</p>
-            <p>3. If you changed companion code, restart the app: <code>npm run dev</code>.</p>
+            <p>3. If you changed local companion code, restart your app process.</p>
             <p>
               If script execution is blocked, run once:
               <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">Set-ExecutionPolicy -Scope Process Bypass</code>
@@ -55,19 +84,19 @@ export default async function CompanionPage() {
             <p>
               4. Recommended first run (fast backfill and clear exit):
               <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot; -BackfillOnly -BackfillLogLimit 120 -BackfillFlushEveryLogs 20
+                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs" -BackfillOnly -BackfillLogLimit 120 -BackfillFlushEveryLogs 20`}
               </code>
             </p>
             <p>
               Optional deeper history scan:
               <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot; -FullBackfill
+                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs" -FullBackfill`}
               </code>
             </p>
             <p>
               5. Optional live mode while playing:
               <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot;
+                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs"`}
               </code>
             </p>
             <p>Use script output as source of truth: look for <code>Sent X events (taskUpdates=Y)</code>.</p>

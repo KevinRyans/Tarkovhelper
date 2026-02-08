@@ -52,9 +52,9 @@ export async function tarkovRequest<TData>(
           "content-type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
-        next: {
-          revalidate: env.TARKOV_CACHE_REVALIDATE_SECONDS,
-        },
+        // Avoid Next data-cache size limits for large GraphQL payloads (tasks/items pages can exceed 2MB).
+        // App-level caching is handled in service layer + DB snapshot sync.
+        cache: "no-store",
       });
 
       if (!response.ok) {

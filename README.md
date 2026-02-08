@@ -86,6 +86,11 @@ npm install
 npm run prisma:generate
 ```
 
+Note:
+- Prisma CLI reads `.env` by default.
+- Next.js runtime reads `.env.local` first.
+- Keep `DATABASE_URL` aligned in both files, or export `DATABASE_URL` in shell before running Prisma commands.
+
 3. Create DB schema
 
 ```bash
