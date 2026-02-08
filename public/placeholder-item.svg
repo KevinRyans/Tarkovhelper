@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <rect width="256" height="256" rx="20" fill="#121716"/>
+  <rect x="28" y="28" width="200" height="200" rx="12" fill="#1f2624" stroke="#2b3a35"/>
+  <path d="M74 172L108 128L136 152L168 108L182 172H74Z" fill="#4f6a5f"/>
+  <circle cx="102" cy="94" r="16" fill="#4f6a5f"/>
+  <text x="128" y="214" text-anchor="middle" fill="#8ba99d" font-family="Arial, sans-serif" font-size="16">NO ICON</text>
+</svg>

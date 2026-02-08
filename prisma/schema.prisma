@@ -1,0 +1,254 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+enum PrivacySetting {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id            String                  @id @default(cuid())
+  name          String?
+  email         String                  @unique
+  emailVerified DateTime?
+  image         String?
+  username      String                  @unique
+  hash          String?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  accounts              Account[]
+  sessions              Session[]
+  authenticators        Authenticator[]
+  settings              UserSettings?
+  taskProgress          TaskProgress[]
+  taskObjectiveProgress TaskObjectiveProgress[]
+  builds                Build[]
+  watchlist             WatchlistItem[]
+  companionToken        CompanionToken?
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}
+
+model UserSettings {
+  userId       String         @id
+  level        Int            @default(1)
+  fleaUnlocked Boolean        @default(false)
+  traderLevels Json           @default("{}")
+  privacy      PrivacySetting @default(PRIVATE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TaskProgress {
+  id        String             @id @default(cuid())
+  userId    String
+  taskId    String
+  status    TaskProgressStatus @default(NOT_STARTED)
+  notes     String?
+  updatedAt DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId])
+  @@index([userId, status])
+}
+
+model TaskObjectiveProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  taskId      String
+  objectiveId String
+  done        Boolean  @default(false)
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId, objectiveId])
+  @@index([userId, taskId])
+}
+
+model Build {
+  id           String   @id @default(cuid())
+  userId       String
+  weaponItemId String
+  name         String
+  description  String?
+  tags         String[]
+  patch        String
+  isPublic     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  author   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parts    BuildPart[]
+  snapshot BuildSnapshotStats?
+
+  @@index([userId, createdAt])
+  @@index([isPublic, createdAt])
+}
+
+model BuildPart {
+  id      String  @id @default(cuid())
+  buildId String
+  itemId  String
+  itemName String?
+  slotKey String
+  source  String?
+  priceRub Int?
+
+  build Build @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  @@index([buildId])
+}
+
+model BuildSnapshotStats {
+  buildId         String   @id
+  recoil          Float?
+  ergo            Float?
+  cost            Int?
+  weight          Float?
+  muzzleVelocity  Float?
+  updatedAt       DateTime @updatedAt
+
+  build Build @relation(fields: [buildId], references: [id], onDelete: Cascade)
+}
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  userId      String
+  itemId      String
+  targetPrice Int?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, itemId])
+}
+
+model TaskCatalog {
+  id                 String   @id
+  name               String
+  normalizedName     String?
+  traderName         String?
+  mapName            String?
+  minPlayerLevel     Int?
+  kappaRequired      Boolean  @default(false)
+  lightkeeperRequired Boolean @default(false)
+  taskData           Json
+  updatedAt          DateTime @updatedAt
+  syncedAt           DateTime @default(now())
+
+  @@index([kappaRequired])
+  @@index([traderName])
+}
+
+model ItemCatalog {
+  id            String   @id
+  name          String
+  normalizedName String
+  shortName     String?
+  typeTags      String[]
+  iconLink      String?
+  avg24hPrice   Int?
+  lastLowPrice  Int?
+  itemData      Json
+  updatedAt     DateTime @updatedAt
+  syncedAt      DateTime @default(now())
+
+  @@index([normalizedName])
+}
+
+model ItemAsset {
+  itemId    String   @id
+  source    String
+  url       String
+  license   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SyncState {
+  key       String   @id
+  lastRunAt DateTime?
+  meta      Json?
+}
+
+model CompanionToken {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  tokenHash   String   @unique
+  tokenPreview String
+  lastUsedAt  DateTime?
+  lastSource  String?
+  rotatedAt   DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([lastUsedAt])
+}

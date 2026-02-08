@@ -1,0 +1,93 @@
+import Link from "next/link";
+
+import { CompanionSetupCard } from "@/components/companion/companion-setup-card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getServerAuthSession } from "@/lib/auth/session";
+
+export default async function CompanionPage() {
+  const session = await getServerAuthSession();
+
+  if (!session?.user?.id) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Companion Sync Setup</CardTitle>
+            <CardDescription>Sign in to create a sync token and connect the background agent.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-x-2">
+            <Link href="/auth/login" className="text-[var(--accent)] hover:underline">
+              Log in
+            </Link>
+            <span className="text-[var(--muted)]">or</span>
+            <Link href="/auth/register" className="text-[var(--accent)] hover:underline">
+              create account
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold">Companion Sync</h1>
+        <p className="text-sm text-[var(--muted)]">Connect a local EFT log watcher to sync task progress automatically.</p>
+      </div>
+
+      <CompanionSetupCard />
+
+      <section className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Setup Steps (Windows)</CardTitle>
+            <CardDescription>Background watcher + automatic backfill from existing logs.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <p>1. Generate token in the card above.</p>
+            <p>2. Download script: <code>tarkov-helper-companion.ps1</code>.</p>
+            <p>3. If you changed companion code, restart the app: <code>npm run dev</code>.</p>
+            <p>
+              If script execution is blocked, run once:
+              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">Set-ExecutionPolicy -Scope Process Bypass</code>
+            </p>
+            <p>
+              4. Recommended first run (fast backfill and clear exit):
+              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
+                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot; -BackfillOnly -BackfillLogLimit 120 -BackfillFlushEveryLogs 20
+              </code>
+            </p>
+            <p>
+              Optional deeper history scan:
+              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
+                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot; -FullBackfill
+              </code>
+            </p>
+            <p>
+              5. Optional live mode while playing:
+              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
+                .\tarkov-helper-companion.ps1 -ApiBaseUrl &quot;http://localhost:3000&quot; -CompanionToken &quot;thp_...&quot; -LogsRoot &quot;C:\...\Logs&quot;
+              </code>
+            </p>
+            <p>Use script output as source of truth: look for <code>Sent X events (taskUpdates=Y)</code>.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Notes</CardTitle>
+            <CardDescription>What this can and cannot sync.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-[var(--muted)]">
+            <p>Data coverage depends on what EFT logs contain and retain on disk.</p>
+            <p>Old progress can be backfilled only if historical logs still exist.</p>
+            <p>Unknown quest names/IDs are skipped safely and reported by the ingest API.</p>
+            <p>The sync badge auto-refreshes every 15 seconds. Hard-refresh the page if needed.</p>
+            <p>Rotate token any time if you want to revoke old agent access.</p>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  );
+}

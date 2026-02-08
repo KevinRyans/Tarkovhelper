@@ -1,0 +1,18 @@
+{
+  "source": "manual-import",
+  "events": [
+    {
+      "taskId": "6798949f89f1f81f0a0f6f8f",
+      "status": "DONE"
+    },
+    {
+      "taskName": "First in Line",
+      "status": "IN_PROGRESS"
+    },
+    {
+      "taskName": "Debut",
+      "objectiveId": "objective-1",
+      "objectiveDone": true
+    }
+  ]
+}
