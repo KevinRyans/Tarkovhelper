@@ -31,15 +31,45 @@ $ErrorActionPreference = "Stop"
 function Resolve-LogsRoot {
   param([string]$UserPath)
 
-  if ($UserPath -and (Test-Path -LiteralPath $UserPath)) {
-    if (Test-Path -LiteralPath (Join-Path $UserPath "Logs")) {
-      return (Join-Path $UserPath "Logs")
-    }
+  function Add-Candidate {
+    param([System.Collections.Generic.List[string]]$Target, [string]$Path)
 
-    return $UserPath
+    if ($Path -and -not [string]::IsNullOrWhiteSpace($Path)) {
+      $Target.Add($Path) | Out-Null
+    }
   }
 
-  $candidates = @(
+  function Add-SteamLogsFromRoot {
+    param([System.Collections.Generic.List[string]]$Target, [string]$RootPath)
+
+    if (-not $RootPath) {
+      return
+    }
+
+    $normalized = ($RootPath -replace "/", "\").Trim().TrimEnd("\")
+    if (-not $normalized) {
+      return
+    }
+
+    Add-Candidate -Target $Target -Path (Join-Path $normalized "steamapps\common\Escape from Tarkov\build\Logs")
+    Add-Candidate -Target $Target -Path (Join-Path $normalized "steamapps\common\Escape from Tarkov\Logs")
+  }
+
+  if ($UserPath) {
+    if (Test-Path -LiteralPath $UserPath) {
+      if (Test-Path -LiteralPath (Join-Path $UserPath "Logs")) {
+        return (Join-Path $UserPath "Logs")
+      }
+
+      return $UserPath
+    }
+
+    Write-Warning ("Provided -LogsRoot path was not found: {0}. Trying auto-detect..." -f $UserPath)
+  }
+
+  $candidates = New-Object 'System.Collections.Generic.List[string]'
+
+  $defaultCandidates = @(
     "$env:USERPROFILE\Documents\Escape from Tarkov\Logs",
     "$env:USERPROFILE\Documents\EscapeFromTarkov\Logs",
     "$env:APPDATA\Battlestate Games\Escape from Tarkov\Logs",
@@ -47,16 +77,95 @@ function Resolve-LogsRoot {
     "$env:LOCALAPPDATA\Battlestate Games\Escape from Tarkov\Logs",
     "$env:LOCALAPPDATA\Battlestate Games\EscapeFromTarkov\Logs",
     "C:\Battlestate Games\EFT (live)\Logs",
-    "C:\Battlestate Games\EFT\Logs"
+    "C:\Battlestate Games\EFT\Logs",
+    "C:\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\Logs",
+    "C:\Program Files\Steam\steamapps\common\Escape from Tarkov\build\Logs"
   )
+
+  foreach ($path in $defaultCandidates) {
+    Add-Candidate -Target $candidates -Path $path
+  }
+
+  $steamInstallRoots = @(
+    "$env:ProgramFiles(x86)\Steam",
+    "$env:ProgramFiles\Steam",
+    "$env:LOCALAPPDATA\Steam"
+  )
+
+  foreach ($steamRoot in $steamInstallRoots) {
+    Add-SteamLogsFromRoot -Target $candidates -RootPath $steamRoot
+  }
 
   $drives = Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root
   foreach ($driveRoot in $drives) {
     $drive = $driveRoot.TrimEnd("\")
-    $candidates += "$drive\Battlestate Games\EFT (live)\Logs"
-    $candidates += "$drive\Battlestate Games\EFT\Logs"
-    $candidates += "$drive\Games\Battlestate Games\EFT (live)\Logs"
-    $candidates += "$drive\Games\Battlestate Games\EFT\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Battlestate Games\EFT (live)\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Battlestate Games\EFT\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Games\Battlestate Games\EFT (live)\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Games\Battlestate Games\EFT\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\SteamLibrary\steamapps\common\Escape from Tarkov\build\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Games\SteamLibrary\steamapps\common\Escape from Tarkov\build\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\Logs"
+    Add-Candidate -Target $candidates -Path "$drive\Program Files\Steam\steamapps\common\Escape from Tarkov\build\Logs"
+  }
+
+  $steamRegistryKeys = @(
+    "HKCU:\Software\Valve\Steam",
+    "HKLM:\SOFTWARE\WOW6432Node\Valve\Steam",
+    "HKLM:\SOFTWARE\Valve\Steam"
+  )
+
+  $steamLibraryFiles = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($key in $steamRegistryKeys) {
+    if (-not (Test-Path -LiteralPath $key)) {
+      continue
+    }
+
+    try {
+      $props = Get-ItemProperty -LiteralPath $key
+      $steamPath = $null
+      if ($props.PSObject.Properties.Name -contains "SteamPath") {
+        $steamPath = [string]$props.SteamPath
+      } elseif ($props.PSObject.Properties.Name -contains "InstallPath") {
+        $steamPath = [string]$props.InstallPath
+      }
+
+      if ($steamPath) {
+        Add-SteamLogsFromRoot -Target $candidates -RootPath $steamPath
+        Add-Candidate -Target $steamLibraryFiles -Path (Join-Path (($steamPath -replace "/", "\").TrimEnd("\")) "steamapps\libraryfolders.vdf")
+      }
+    } catch {
+      Write-Warning ("Could not read Steam registry key {0}: {1}" -f $key, $_.Exception.Message)
+    }
+  }
+
+  Add-Candidate -Target $steamLibraryFiles -Path "$env:ProgramFiles(x86)\Steam\steamapps\libraryfolders.vdf"
+  Add-Candidate -Target $steamLibraryFiles -Path "$env:ProgramFiles\Steam\steamapps\libraryfolders.vdf"
+
+  foreach ($libraryFile in ($steamLibraryFiles | Select-Object -Unique)) {
+    if (-not (Test-Path -LiteralPath $libraryFile)) {
+      continue
+    }
+
+    try {
+      $raw = Get-Content -LiteralPath $libraryFile -Raw
+      if (-not $raw) {
+        continue
+      }
+
+      $matches = [System.Text.RegularExpressions.Regex]::Matches($raw, '"path"\s*"(?<path>[^"]+)"')
+      foreach ($m in $matches) {
+        $libraryPath = $m.Groups["path"].Value
+        if (-not $libraryPath) {
+          continue
+        }
+
+        $normalizedLibraryPath = ($libraryPath -replace "\\\\", "\" -replace "/", "\").Trim()
+        Add-SteamLogsFromRoot -Target $candidates -RootPath $normalizedLibraryPath
+      }
+    } catch {
+      Write-Warning ("Could not parse Steam library file {0}: {1}" -f $libraryFile, $_.Exception.Message)
+    }
   }
 
   $launcherSettingsCandidates = @(
@@ -389,7 +498,7 @@ function Get-OrderedLogs {
 
 $resolvedLogsRoot = Resolve-LogsRoot -UserPath $LogsRoot
 if (-not $resolvedLogsRoot) {
-  throw "Could not find EFT log directory. Pass -LogsRoot explicitly."
+  throw "Could not find EFT log directory. Do not use placeholder C:\...\Logs. Try -LogsRoot `"C:\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\Logs`" (Steam) or -LogsRoot `"C:\Battlestate Games\EFT (live)\Logs`" (launcher)."
 }
 
 Write-Host ("Using logs: {0}" -f $resolvedLogsRoot)

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 
+import { CompanionGuideCard } from "@/components/companion/companion-guide-card";
 import { CompanionSetupCard } from "@/components/companion/companion-setup-card";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerAuthSession } from "@/lib/auth/session";
@@ -68,40 +69,7 @@ export default async function CompanionPage() {
       <CompanionSetupCard />
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps (Windows)</CardTitle>
-            <CardDescription>Background watcher + automatic backfill from existing logs.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p>1. Generate token in the card above.</p>
-            <p>2. Download script: <code>tarkov-helper-companion.ps1</code>.</p>
-            <p>3. If you changed local companion code, restart your app process.</p>
-            <p>
-              If script execution is blocked, run once:
-              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">Set-ExecutionPolicy -Scope Process Bypass</code>
-            </p>
-            <p>
-              4. Recommended first run (fast backfill and clear exit):
-              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs" -BackfillOnly -BackfillLogLimit 120 -BackfillFlushEveryLogs 20`}
-              </code>
-            </p>
-            <p>
-              Optional deeper history scan:
-              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs" -FullBackfill`}
-              </code>
-            </p>
-            <p>
-              5. Optional live mode while playing:
-              <code className="ml-1 block rounded bg-[var(--surface-2)] px-2 py-1">
-                {`.\\tarkov-helper-companion.ps1 -ApiBaseUrl "${apiBaseUrl}" -CompanionToken "thp_..." -LogsRoot "C:\\...\\Logs"`}
-              </code>
-            </p>
-            <p>Use script output as source of truth: look for <code>Sent X events (taskUpdates=Y)</code>.</p>
-          </CardContent>
-        </Card>
+        <CompanionGuideCard apiBaseUrl={apiBaseUrl} />
 
         <Card>
           <CardHeader>

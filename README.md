@@ -140,13 +140,27 @@ Companion Sync lets users auto-update task progress from a local background scri
 
 1. Open `/dashboard` or `/companion` and generate a token.
 2. Copy ingest endpoint + token.
-3. Run the script:
+3. Run first pass (auto-detect logs for Steam + launcher):
 
 ```powershell
-.\tarkov-helper-companion.ps1 -ApiBaseUrl "http://localhost:3000" -CompanionToken "thp_..."
+.\tarkov-helper-companion.ps1 -ApiBaseUrl "https://your-domain-or-localhost" -CompanionToken "thp_..." -BackfillOnly -BackfillLogLimit 120 -BackfillFlushEveryLogs 20
 ```
 
-4. Keep script running while playing EFT.
+4. If auto-detect fails, pass `-LogsRoot` explicitly.
+
+Steam example:
+
+```powershell
+.\tarkov-helper-companion.ps1 -ApiBaseUrl "https://your-domain-or-localhost" -CompanionToken "thp_..." -LogsRoot "C:\Program Files (x86)\Steam\steamapps\common\Escape from Tarkov\build\Logs" -BackfillOnly
+```
+
+Launcher example:
+
+```powershell
+.\tarkov-helper-companion.ps1 -ApiBaseUrl "https://your-domain-or-localhost" -CompanionToken "thp_..." -LogsRoot "C:\Battlestate Games\EFT (live)\Logs" -BackfillOnly
+```
+
+5. Keep script running while playing EFT (remove `-BackfillOnly` for live mode).
 
 Notes:
 - Initial sync/backfill depends on logs still present on disk.

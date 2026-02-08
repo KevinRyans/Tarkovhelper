@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
+const COMPANION_TOKEN_STORAGE_KEY = "companion:lastToken";
+const COMPANION_TOKEN_EVENT = "companion-token-created";
+
 type TokenStatusResponse = {
   configured: boolean;
   tokenPreview: string | null;
@@ -80,6 +83,18 @@ export function CompanionSetupCard(props: { compact?: boolean }) {
 
       const payload = (await response.json()) as TokenCreateResponse;
       setNewToken(payload.token);
+
+      try {
+        localStorage.setItem(COMPANION_TOKEN_STORAGE_KEY, payload.token);
+        window.dispatchEvent(
+          new CustomEvent(COMPANION_TOKEN_EVENT, {
+            detail: { token: payload.token },
+          }),
+        );
+      } catch {
+        // Ignore local storage failures (private mode / blocked storage).
+      }
+
       await loadStatus();
     } finally {
       setWorking(false);
@@ -93,6 +108,18 @@ export function CompanionSetupCard(props: { compact?: boolean }) {
         method: "DELETE",
       });
       setNewToken(null);
+
+      try {
+        localStorage.removeItem(COMPANION_TOKEN_STORAGE_KEY);
+        window.dispatchEvent(
+          new CustomEvent(COMPANION_TOKEN_EVENT, {
+            detail: { token: "" },
+          }),
+        );
+      } catch {
+        // Ignore local storage failures.
+      }
+
       await loadStatus();
     } finally {
       setWorking(false);
