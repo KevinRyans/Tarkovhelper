@@ -33,6 +33,9 @@ export function GlobalCommand() {
   const [loading, setLoading] = useState(false);
 
   const debounced = useDebouncedValue(query);
+  const trimmedQuery = debounced.trim();
+  const minimumQueryLength = 2;
+  const canSearch = trimmedQuery.length >= minimumQueryLength;
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -55,45 +58,43 @@ export function GlobalCommand() {
       return;
     }
 
-    if (!debounced.trim()) {
+    if (!canSearch) {
+      setResults([]);
+      setLoading(false);
       return;
     }
 
-    let active = true;
+    const controller = new AbortController();
     setLoading(true);
 
-    fetch(`/api/search?q=${encodeURIComponent(debounced)}`)
+    fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}`, {
+      signal: controller.signal,
+      cache: "force-cache",
+    })
       .then((res) => res.json())
       .then((data: { results: SearchResult[] }) => {
-        if (!active) {
-          return;
-        }
         setResults(data.results ?? []);
       })
       .catch(() => {
-        if (!active) {
-          return;
-        }
         setResults([]);
       })
       .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+        setLoading(false);
       });
 
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [debounced, open]);
+  }, [canSearch, open, trimmedQuery]);
 
-  const visibleResults = debounced.trim() ? results : [];
+  const visibleResults = canSearch ? results : [];
 
   const emptyText = useMemo(() => {
     if (!query) return "Start typing to search tasks, traders, maps and weapons";
+    if (!canSearch) return "Type at least 2 characters";
     if (loading) return "Searching...";
     return "No matches";
-  }, [loading, query]);
+  }, [canSearch, loading, query]);
 
   return (
     <>

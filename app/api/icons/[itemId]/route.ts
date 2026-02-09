@@ -30,6 +30,13 @@ function placeholderRedirect(requestUrl: string) {
   return response;
 }
 
+function externalRedirect(requestUrl: string, externalUrl: string) {
+  const response = NextResponse.redirect(externalUrl);
+  response.headers.set("cache-control", ICON_CACHE_CONTROL);
+  response.headers.set("x-icon-source", new URL(externalUrl, requestUrl).hostname);
+  return response;
+}
+
 async function persistIconMapping(itemId: string, source: string, url: string) {
   try {
     await db.itemAsset.upsert({
@@ -49,8 +56,21 @@ async function persistIconMapping(itemId: string, source: string, url: string) {
   }
 }
 
-async function fetchImageResponse(url: string) {
+async function verifyImageUrl(url: string) {
   try {
+    const headResponse = await fetch(url, {
+      method: "HEAD",
+      next: {
+        revalidate: env.TARKOV_CACHE_REVALIDATE_SECONDS,
+      },
+    });
+
+    const headType = headResponse.headers.get("content-type");
+    if (headResponse.ok && isImageLikeResponse(headType)) {
+      return true;
+    }
+
+    // Some CDNs do not serve useful HEAD responses. Fallback to lightweight GET validation.
     const response = await fetch(url, {
       next: {
         revalidate: env.TARKOV_CACHE_REVALIDATE_SECONDS,
@@ -58,16 +78,13 @@ async function fetchImageResponse(url: string) {
     });
 
     const contentType = response.headers.get("content-type");
-    if (!response.ok || !response.body || !isImageLikeResponse(contentType)) {
-      return null;
+    if (!response.ok || !isImageLikeResponse(contentType)) {
+      return false;
     }
 
-    return {
-      body: response.body,
-      contentType: contentType ?? "image/webp",
-    };
+    return true;
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -85,6 +102,11 @@ export async function GET(request: Request, context: { params: Promise<{ itemId:
       return placeholderRedirect(request.url);
     }
 
+    // Fast path: once resolved, do not stream bytes through this route; let browser/CDN fetch directly.
+    if (existingAsset?.url && /^https?:\/\//i.test(existingAsset.url)) {
+      return externalRedirect(request.url, existingAsset.url);
+    }
+
     let resolvedUrl = existingAsset?.url ?? null;
 
     if (!resolvedUrl) {
@@ -100,13 +122,13 @@ export async function GET(request: Request, context: { params: Promise<{ itemId:
     }
 
     const fallbackUrl = fallbackIconUrl(itemId);
-    const candidates = Array.from(new Set([fallbackUrl, resolvedUrl])).filter(
+    const candidates = Array.from(new Set([resolvedUrl, fallbackUrl])).filter(
       (url): url is string => typeof url === "string" && url.length > 0 && !url.startsWith("/"),
     );
 
     for (const candidate of candidates) {
-      const image = await fetchImageResponse(candidate);
-      if (!image) {
+      const valid = await verifyImageUrl(candidate);
+      if (!valid) {
         continue;
       }
 
@@ -114,13 +136,7 @@ export async function GET(request: Request, context: { params: Promise<{ itemId:
         await persistIconMapping(itemId, candidate === fallbackUrl ? "fallback" : existingAsset?.source ?? "resolved", candidate);
       }
 
-      return new NextResponse(image.body, {
-        status: 200,
-        headers: {
-          "content-type": image.contentType,
-          "cache-control": ICON_CACHE_CONTROL,
-        },
-      });
+      return externalRedirect(request.url, candidate);
     }
 
     await persistIconMapping(itemId, "missing", MISSING_ICON_URL);
