@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { CompanionSetupCard } from "@/components/companion/companion-setup-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -184,7 +183,18 @@ export default async function DashboardPage() {
       </section>
 
       <section className="grid gap-4">
-        <CompanionSetupCard compact />
+        <Card>
+          <CardHeader>
+            <CardTitle>Companion sync</CardTitle>
+            <CardDescription>Auto-update task progress from EFT logs while you play.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-[var(--muted)]">Generate token, copy commands, and run quick backfill in one place.</p>
+            <Link href="/companion">
+              <Button size="sm">Open companion setup</Button>
+            </Link>
+          </CardContent>
+        </Card>
       </section>
     </div>
   );

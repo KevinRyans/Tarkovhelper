@@ -4,7 +4,6 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
-import { Providers } from "@/components/providers";
 
 import "./globals.css";
 
@@ -27,13 +26,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
-        <Providers>
-          <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
-            <SiteHeader />
-            <main className="mx-auto w-full max-w-[1440px] px-4 py-6">{children}</main>
-            <SiteFooter />
-          </div>
-        </Providers>
+        <div className="min-h-screen bg-[var(--background)] text-[var(--text)]">
+          <SiteHeader />
+          <main className="mx-auto w-full max-w-[1440px] px-4 py-6">{children}</main>
+          <SiteFooter />
+        </div>
         <SpeedInsights />
       </body>
     </html>

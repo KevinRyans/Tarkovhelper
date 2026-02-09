@@ -1,10 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { TaskDetail } from "@/components/tasks/task-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,10 @@ import { Progress } from "@/components/ui/progress";
 import { Select } from "@/components/ui/select";
 import type { TaskNeededItem } from "@/lib/tasks/logic";
 import type { TarkovTask } from "@/lib/tarkov/types";
+
+const TaskDetail = dynamic(() => import("@/components/tasks/task-detail").then((module) => module.TaskDetail), {
+  ssr: false,
+});
 
 type TaskStatus = "NOT_STARTED" | "IN_PROGRESS" | "DONE";
 

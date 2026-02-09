@@ -27,7 +27,8 @@ type TokenCreateResponse = {
   rotatedAt: string;
 };
 
-export function CompanionSetupCard(props: { compact?: boolean }) {
+export function CompanionSetupCard(props: { compact?: boolean; autoRefresh?: boolean }) {
+  const autoRefresh = props.autoRefresh ?? true;
   const [status, setStatus] = useState<TokenStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
@@ -60,6 +61,10 @@ export function CompanionSetupCard(props: { compact?: boolean }) {
 
   useEffect(() => {
     void loadStatus();
+    if (!autoRefresh) {
+      return;
+    }
+
     const handle = window.setInterval(() => {
       void loadStatus();
     }, 15000);
@@ -67,7 +72,7 @@ export function CompanionSetupCard(props: { compact?: boolean }) {
     return () => {
       window.clearInterval(handle);
     };
-  }, [loadStatus]);
+  }, [autoRefresh, loadStatus]);
 
   async function createToken() {
     setWorking(true);
@@ -145,8 +150,8 @@ export function CompanionSetupCard(props: { compact?: boolean }) {
       <CardContent className="space-y-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={status?.configured ? "success" : "neutral"}>{status?.configured ? "Configured" : "Not configured"}</Badge>
-          {status?.lastUsedAt ? <Badge variant="neutral">Last sync {new Date(status.lastUsedAt).toLocaleString()}</Badge> : null}
-          {status?.lastSource ? <Badge variant="neutral">Source: {status.lastSource}</Badge> : null}
+          {!props.compact && status?.lastUsedAt ? <Badge variant="neutral">Last sync {new Date(status.lastUsedAt).toLocaleString()}</Badge> : null}
+          {!props.compact && status?.lastSource ? <Badge variant="neutral">Source: {status.lastSource}</Badge> : null}
         </div>
 
         <div className="grid gap-2 md:grid-cols-[1fr_auto]">
