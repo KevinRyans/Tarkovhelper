@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +26,7 @@ export default function RegisterPage() {
     const response = await fetch("/api/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, username, password }),
+      body: JSON.stringify({ email, username, password, inviteCode }),
     });
 
     if (!response.ok) {
@@ -50,7 +51,7 @@ export default function RegisterPage() {
       <Card>
         <CardHeader>
           <CardTitle>Create account</CardTitle>
-          <CardDescription>Your progress syncs across tasks, Kappa and weapon builds.</CardDescription>
+          <CardDescription>Closed beta may require an invite code. Your progress syncs across tasks, Kappa and builds.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={onSubmit}>
@@ -86,6 +87,21 @@ export default function RegisterPage() {
                 onChange={(event) => setPassword(event.target.value)}
                 minLength={8}
                 required
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-sm text-[var(--muted)]" htmlFor="inviteCode">
+                Invite code
+              </label>
+              <Input
+                id="inviteCode"
+                value={inviteCode}
+                onChange={(event) => setInviteCode(event.target.value.toUpperCase().trim())}
+                minLength={5}
+                maxLength={64}
+                required={false}
+                placeholder="THB-XXXX-XXXX"
               />
             </div>
 

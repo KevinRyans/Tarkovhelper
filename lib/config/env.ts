@@ -10,11 +10,45 @@ const emptyToUndefined = (value: unknown) => {
 
 const optionalUrl = z.preprocess(emptyToUndefined, z.string().url().optional());
 const optionalString = z.preprocess(emptyToUndefined, z.string().optional());
+const optionalEmail = z.preprocess(emptyToUndefined, z.string().email().optional());
+const optionalBoolean = z.preprocess((value) => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["0", "false", "no", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  return value;
+}, z.boolean().optional());
+const inviteCodePrefix = z.preprocess((value) => {
+  if (typeof value !== "string" || !value.trim()) {
+    return "THB";
+  }
+
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}, z.string().min(2).max(12));
 
 const envSchema = z.object({
   DATABASE_URL: optionalString,
   NEXTAUTH_SECRET: optionalString,
   NEXTAUTH_URL: optionalUrl,
+  INVITE_ONLY_MODE: optionalBoolean.default(true),
+  ADMIN_EMAIL: optionalEmail,
+  ADMIN_PANEL_KEY: optionalString,
+  INVITE_CODE_PREFIX: inviteCodePrefix.default("THB"),
+  INVITE_CODE_LENGTH: z.coerce.number().min(4).max(20).default(8),
   OPENAI_API_KEY: optionalString,
   TARKOV_DEV_ENDPOINT: z.string().url().default("https://api.tarkov.dev/graphql"),
   TARKOV_DEV_REQUESTS_PER_SECOND: z.coerce.number().min(1).max(20).default(4),

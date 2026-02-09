@@ -59,6 +59,11 @@ Create `.env` (or `.env.local`):
 DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB"
 NEXTAUTH_SECRET="replace-with-long-random-secret"
 NEXTAUTH_URL="http://localhost:3000"
+INVITE_ONLY_MODE="true"
+ADMIN_EMAIL="owner@example.com"
+ADMIN_PANEL_KEY="replace-with-long-random-admin-key"
+INVITE_CODE_PREFIX="THB"
+INVITE_CODE_LENGTH="8"
 
 # Optional
 OPENAI_API_KEY=""
@@ -103,7 +108,13 @@ npm run prisma:push
 npm run db:sync
 ```
 
-5. Run dev server
+5. Seed invite codes for closed beta (default target: 25 unused)
+
+```bash
+npm run invites:seed
+```
+
+6. Run dev server
 
 ```bash
 npm run dev
@@ -119,6 +130,34 @@ npm run dev
 - `npm run prisma:studio`
 - `npm run db:sync`
 - `npm run db:prepare`
+- `npm run invites:seed`
+
+## Invite-Only Beta
+
+- Registration requires a valid invite code when `INVITE_ONLY_MODE=true`.
+- Codes are one-time use and get bound to the user who registered with them.
+- Generate/maintain your pool:
+
+```bash
+npm run invites:seed
+```
+
+Optional flags:
+
+```bash
+npm run invites:seed -- --target 25 --prefix THB --length 8
+npm run invites:seed -- --reset-unused --target 25
+```
+
+## Admin Panel
+
+- Private panel route: `/admin/<ADMIN_PANEL_KEY>`
+- Access is allowed only for a signed-in account matching `ADMIN_EMAIL`.
+- Controls available:
+  - Toggle invite-only mode on/off in real time
+  - Generate additional invite codes
+  - Review recent invite usage
+  - View recent users and which invite they used
 
 ## Companion Sync
 

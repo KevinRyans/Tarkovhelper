@@ -38,6 +38,7 @@ model User {
   builds                Build[]
   watchlist             WatchlistItem[]
   companionToken        CompanionToken?
+  usedInviteCodes       InviteCode[]            @relation("InviteCodeUsedBy")
 }
 
 model Account {
@@ -251,4 +252,17 @@ model CompanionToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([lastUsedAt])
+}
+
+model InviteCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  usedAt    DateTime?
+  usedById  String?
+
+  usedBy User? @relation("InviteCodeUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([usedAt])
 }
