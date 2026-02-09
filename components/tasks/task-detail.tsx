@@ -20,6 +20,14 @@ type ItemRef = {
   iconLink?: string | null;
 };
 
+function itemIconSrc(item: ItemRef) {
+  if (item.iconLink && /^https?:\/\//i.test(item.iconLink)) {
+    return item.iconLink;
+  }
+
+  return `/api/icons/${item.id}`;
+}
+
 function ItemPill(props: {
   item: ItemRef;
   count?: number;
@@ -27,7 +35,7 @@ function ItemPill(props: {
 }) {
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-1.5 py-1 text-xs">
-      <Image src={`/api/icons/${props.item.id}`} alt={props.item.name} width={14} height={14} unoptimized className="h-3.5 w-3.5 rounded object-cover" />
+      <Image src={itemIconSrc(props.item)} alt={props.item.name} width={14} height={14} unoptimized className="h-3.5 w-3.5 rounded object-cover" />
       <span className="max-w-[170px] truncate">{props.item.name}</span>
       {props.count ? <span className="text-[var(--muted)]">x{props.count}</span> : null}
     </span>
@@ -42,7 +50,7 @@ function ItemRow(props: {
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-2 text-sm">
       <div className="flex min-w-0 items-center gap-2">
-        <Image src={`/api/icons/${props.item.id}`} alt={props.item.name} width={24} height={24} unoptimized className="h-6 w-6 rounded object-cover" />
+        <Image src={itemIconSrc(props.item)} alt={props.item.name} width={24} height={24} unoptimized className="h-6 w-6 rounded object-cover" />
         <span className="truncate">{props.item.name}</span>
       </div>
 

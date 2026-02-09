@@ -38,6 +38,24 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
     );
   }
 
+  const uniqueItemIds = Array.from(new Set(build.parts.map((part) => part.itemId)));
+  const itemIconRows =
+    uniqueItemIds.length > 0
+      ? await db.itemCatalog.findMany({
+          where: {
+            id: {
+              in: uniqueItemIds,
+            },
+          },
+          select: {
+            id: true,
+            iconLink: true,
+          },
+        })
+      : [];
+
+  const iconByItemId = new Map(itemIconRows.map((row) => [row.id, row.iconLink]));
+
   return (
     <div className="space-y-4">
       <Card>
@@ -80,7 +98,7 @@ export default async function BuildDetailPage({ params }: { params: Promise<{ id
             <div key={part.id} className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-2">
               <div className="flex items-center gap-2">
                 <Image
-                  src={`/api/icons/${part.itemId}`}
+                  src={iconByItemId.get(part.itemId) && /^https?:\/\//i.test(iconByItemId.get(part.itemId) ?? "") ? (iconByItemId.get(part.itemId) as string) : `/api/icons/${part.itemId}`}
                   alt={part.itemName ?? part.itemId}
                   width={40}
                   height={40}

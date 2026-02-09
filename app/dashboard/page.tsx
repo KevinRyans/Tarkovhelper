@@ -8,13 +8,11 @@ import { Progress } from "@/components/ui/progress";
 import { getServerAuthSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { computeUnlockImpact, getUpcomingTasks, getOverallTaskProgress as summarize } from "@/lib/tasks/logic";
-import { getPlayerContextForUser, getUserProgressMaps } from "@/lib/tasks/progress";
-import { getAllTasks, getKappaTasks } from "@/lib/tarkov/service";
+import { getPlayerContextForUser, getUserTaskStatusMap } from "@/lib/tasks/progress";
+import { getAllTasks } from "@/lib/tarkov/service";
 
 export default async function DashboardPage() {
   const session = await getServerAuthSession();
-
-  const [tasks, kappaTasks] = await Promise.all([getAllTasks(), getKappaTasks()]);
 
   if (!session?.user?.id) {
     return (
@@ -40,8 +38,11 @@ export default async function DashboardPage() {
     );
   }
 
-  const [progress, player, recentBuilds] = await Promise.all([
-    getUserProgressMaps(session.user.id),
+  const tasks = await getAllTasks();
+  const kappaTasks = tasks.filter((task) => task.kappaRequired);
+
+  const [statusByTaskId, player, recentBuilds] = await Promise.all([
+    getUserTaskStatusMap(session.user.id),
     getPlayerContextForUser(session.user.id),
     db.build.findMany({
       where: { userId: session.user.id },
@@ -50,6 +51,11 @@ export default async function DashboardPage() {
       take: 5,
     }),
   ]);
+
+  const progress = {
+    statusByTaskId,
+    objectiveDoneByTaskId: {},
+  };
 
   const summary = summarize(tasks, progress);
   const kappaSummary = summarize(kappaTasks, progress);

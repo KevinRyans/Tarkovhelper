@@ -5,7 +5,7 @@ import { TaskDetail } from "@/components/tasks/task-detail";
 import { getServerAuthSession } from "@/lib/auth/session";
 import { getNeededItemsForTask } from "@/lib/tasks/logic";
 import { getUserProgressMaps } from "@/lib/tasks/progress";
-import { getAllTasks, getTaskById } from "@/lib/tarkov/service";
+import { getNextTasksByTaskId, getTaskById } from "@/lib/tarkov/service";
 
 export default async function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,10 +23,7 @@ export default async function TaskDetailPage({ params }: { params: Promise<{ id:
         objectiveDoneByTaskId: {},
       };
 
-  const allTasks = await getAllTasks();
-  const nextTasks = allTasks
-    .filter((candidate) => candidate.taskRequirements.some((req) => req.task.id === task.id))
-    .map((candidate) => ({ id: candidate.id, name: candidate.name }));
+  const nextTasks = await getNextTasksByTaskId(task.id);
 
   return (
     <div className="space-y-4">

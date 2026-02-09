@@ -4,14 +4,13 @@ import { KappaDashboard } from "@/components/kappa/kappa-dashboard";
 import { getServerAuthSession } from "@/lib/auth/session";
 import {
   getFastestPathToKappa,
-  getNeededItemsForTask,
   getMissingPrerequisiteTaskIds,
   getMissingTraderRequirements,
   getStrictRequiredItemsForTask,
 } from "@/lib/tasks/logic";
-import { getPlayerContextForUser, getUserProgressMaps } from "@/lib/tasks/progress";
+import { getPlayerContextForUser, getUserTaskStatusMap } from "@/lib/tasks/progress";
 import { db } from "@/lib/db";
-import { getAllTasks } from "@/lib/tarkov/service";
+import { getKappaTasks } from "@/lib/tarkov/service";
 
 function difficultyFromLevel(level: number | null | undefined) {
   if (!level || level < 20) return "easy" as const;
@@ -21,15 +20,14 @@ function difficultyFromLevel(level: number | null | undefined) {
 
 export default async function KappaPage() {
   const session = await getServerAuthSession();
-  const allTasks = await getAllTasks();
-  const kappaTasks = allTasks.filter((task) => task.kappaRequired);
+  const kappaTasks = await getKappaTasks();
+  const kappaTaskNameById = new Map(kappaTasks.map((task) => [task.id, task.name]));
 
-  const progress = session?.user?.id
-    ? await getUserProgressMaps(session.user.id)
-    : {
-        statusByTaskId: {} as Record<string, TaskProgressStatus>,
-        objectiveDoneByTaskId: {},
-      };
+  const statusByTaskId = session?.user?.id ? await getUserTaskStatusMap(session.user.id) : ({} as Record<string, TaskProgressStatus>);
+  const progress = {
+    statusByTaskId,
+    objectiveDoneByTaskId: {},
+  };
 
   const player = session?.user?.id
     ? await getPlayerContextForUser(session.user.id)
@@ -41,19 +39,6 @@ export default async function KappaPage() {
 
   const ordered = getFastestPathToKappa(kappaTasks);
   const orderMap = new Map(ordered.map((task, index) => [task.id, index]));
-  const dependentMap = new Map<string, Array<{ id: string; name: string }>>();
-
-  for (const task of allTasks) {
-    for (const requirement of task.taskRequirements) {
-      const list = dependentMap.get(requirement.task.id) ?? [];
-      list.push({ id: task.id, name: task.name });
-      dependentMap.set(requirement.task.id, list);
-    }
-  }
-
-  for (const [taskId, list] of dependentMap.entries()) {
-    dependentMap.set(taskId, list.sort((a, b) => a.name.localeCompare(b.name)));
-  }
 
   const rows = kappaTasks
     .map((task) => {
@@ -66,7 +51,7 @@ export default async function KappaPage() {
         trader: task.trader.name,
         map: task.map?.name ?? "",
         status: progress.statusByTaskId[task.id] ?? TaskProgressStatus.NOT_STARTED,
-        blockedByTasks: blockedByTaskIds.map((id) => kappaTasks.find((value) => value.id === id)?.name ?? id),
+        blockedByTasks: blockedByTaskIds.map((id) => kappaTaskNameById.get(id) ?? id),
         blockedByTrader,
         difficulty: difficultyFromLevel(task.minPlayerLevel),
         recommendedOrder: orderMap.get(task.id) ?? 9999,
@@ -94,25 +79,6 @@ export default async function KappaPage() {
   }
 
   const hoardItems = Array.from(hoardMap.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
-
-  const taskDetailsById: Record<
-    string,
-    {
-      task: (typeof kappaTasks)[number];
-      nextTasks: Array<{ id: string; name: string }>;
-      neededItems: ReturnType<typeof getNeededItemsForTask>;
-      objectiveDoneMap: Record<string, boolean>;
-    }
-  > = {};
-
-  for (const task of kappaTasks) {
-    taskDetailsById[task.id] = {
-      task,
-      nextTasks: dependentMap.get(task.id) ?? [],
-      neededItems: getNeededItemsForTask(task),
-      objectiveDoneMap: progress.objectiveDoneByTaskId[task.id] ?? {},
-    };
-  }
 
   let shareUrl: string | undefined;
   if (session?.user?.id) {
@@ -145,7 +111,6 @@ export default async function KappaPage() {
 
       <KappaDashboard
         rows={rows}
-        taskDetailsById={taskDetailsById}
         hoardItems={hoardItems}
         traders={traders}
         maps={maps}

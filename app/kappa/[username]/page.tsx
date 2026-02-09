@@ -6,14 +6,13 @@ import { getServerAuthSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
   getFastestPathToKappa,
-  getNeededItemsForTask,
   getMissingPrerequisiteTaskIds,
   getMissingTraderRequirements,
   getStrictRequiredItemsForTask,
   normalizeTraderLevels,
 } from "@/lib/tasks/logic";
-import { getUserProgressMaps } from "@/lib/tasks/progress";
-import { getAllTasks } from "@/lib/tarkov/service";
+import { getUserTaskStatusMap } from "@/lib/tasks/progress";
+import { getKappaTasks } from "@/lib/tarkov/service";
 
 function difficultyFromLevel(level: number | null | undefined) {
   if (!level || level < 20) return "easy" as const;
@@ -45,9 +44,13 @@ export default async function PublicKappaPage({ params }: { params: Promise<{ us
     );
   }
 
-  const allTasks = await getAllTasks();
-  const kappaTasks = allTasks.filter((task) => task.kappaRequired);
-  const progress = await getUserProgressMaps(user.id);
+  const kappaTasks = await getKappaTasks();
+  const kappaTaskNameById = new Map(kappaTasks.map((task) => [task.id, task.name]));
+  const statusByTaskId = await getUserTaskStatusMap(user.id);
+  const progress = {
+    statusByTaskId,
+    objectiveDoneByTaskId: {},
+  };
 
   const player = {
     level: user.settings?.level ?? 1,
@@ -57,19 +60,6 @@ export default async function PublicKappaPage({ params }: { params: Promise<{ us
 
   const ordered = getFastestPathToKappa(kappaTasks);
   const orderMap = new Map(ordered.map((task, index) => [task.id, index]));
-  const dependentMap = new Map<string, Array<{ id: string; name: string }>>();
-
-  for (const task of allTasks) {
-    for (const requirement of task.taskRequirements) {
-      const list = dependentMap.get(requirement.task.id) ?? [];
-      list.push({ id: task.id, name: task.name });
-      dependentMap.set(requirement.task.id, list);
-    }
-  }
-
-  for (const [taskId, list] of dependentMap.entries()) {
-    dependentMap.set(taskId, list.sort((a, b) => a.name.localeCompare(b.name)));
-  }
 
   const rows = kappaTasks
     .map((task) => {
@@ -82,7 +72,7 @@ export default async function PublicKappaPage({ params }: { params: Promise<{ us
         trader: task.trader.name,
         map: task.map?.name ?? "",
         status: progress.statusByTaskId[task.id] ?? TaskProgressStatus.NOT_STARTED,
-        blockedByTasks: blockedByTaskIds.map((id) => kappaTasks.find((value) => value.id === id)?.name ?? id),
+        blockedByTasks: blockedByTaskIds.map((id) => kappaTaskNameById.get(id) ?? id),
         blockedByTrader,
         difficulty: difficultyFromLevel(task.minPlayerLevel),
         recommendedOrder: orderMap.get(task.id) ?? 9999,
@@ -110,25 +100,6 @@ export default async function PublicKappaPage({ params }: { params: Promise<{ us
 
   const hoardItems = Array.from(hoardMap.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 
-  const taskDetailsById: Record<
-    string,
-    {
-      task: (typeof kappaTasks)[number];
-      nextTasks: Array<{ id: string; name: string }>;
-      neededItems: ReturnType<typeof getNeededItemsForTask>;
-      objectiveDoneMap: Record<string, boolean>;
-    }
-  > = {};
-
-  for (const task of kappaTasks) {
-    taskDetailsById[task.id] = {
-      task,
-      nextTasks: dependentMap.get(task.id) ?? [],
-      neededItems: getNeededItemsForTask(task),
-      objectiveDoneMap: progress.objectiveDoneByTaskId[task.id] ?? {},
-    };
-  }
-
   const traders = Array.from(new Set(rows.map((row) => row.trader))).sort((a, b) => a.localeCompare(b));
   const maps = Array.from(new Set(rows.map((row) => row.map).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
@@ -141,12 +112,12 @@ export default async function PublicKappaPage({ params }: { params: Promise<{ us
 
       <KappaDashboard
         rows={rows}
-        taskDetailsById={taskDetailsById}
         hoardItems={hoardItems}
         traders={traders}
         maps={maps}
         shareUrl={`/kappa/${user.username}`}
         canEdit={Boolean(isOwner)}
+        detailUsername={user.username}
       />
     </div>
   );

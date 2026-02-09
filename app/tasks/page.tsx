@@ -10,7 +10,7 @@ import {
   getUpcomingTasks,
   isTaskUnlocked,
 } from "@/lib/tasks/logic";
-import { getPlayerContextForUser, getUserProgressMaps } from "@/lib/tasks/progress";
+import { getPlayerContextForUser, getUserTaskStatusMap } from "@/lib/tasks/progress";
 import { getAllTasks, getTaskMapAndTraderFacets } from "@/lib/tarkov/service";
 
 function inferQuestType(objectives: Array<{ __typename: string }>) {
@@ -37,12 +37,12 @@ export default async function TasksPage() {
   const session = await getServerAuthSession();
   const tasks = await getAllTasks();
 
-  const progress = session?.user?.id
-    ? await getUserProgressMaps(session.user.id)
-    : {
-        statusByTaskId: {} as Record<string, TaskProgressStatus>,
-        objectiveDoneByTaskId: {},
-      };
+  const statusByTaskId = session?.user?.id ? await getUserTaskStatusMap(session.user.id) : ({} as Record<string, TaskProgressStatus>);
+
+  const progress = {
+    statusByTaskId,
+    objectiveDoneByTaskId: {},
+  };
 
   const player = session?.user?.id
     ? await getPlayerContextForUser(session.user.id)

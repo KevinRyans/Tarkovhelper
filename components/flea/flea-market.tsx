@@ -103,6 +103,14 @@ function relevanceScore(item: FleaItem, query: string) {
   return 0;
 }
 
+function itemIconSrc(item: FleaItem) {
+  if (item.iconLink && /^https?:\/\//i.test(item.iconLink)) {
+    return item.iconLink;
+  }
+
+  return `/api/icons/${item.id}`;
+}
+
 export function FleaMarket(props: {
   initialItems: FleaItem[];
   initialLastUpdated: string | null;
@@ -331,7 +339,7 @@ export function FleaMarket(props: {
           <Card key={item.id}>
             <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
               <div className="flex items-center gap-3">
-                <Image src={`/api/icons/${item.id}`} alt={item.name} width={44} height={44} unoptimized className="h-11 w-11 rounded object-cover" />
+                <Image src={itemIconSrc(item)} alt={item.name} width={44} height={44} unoptimized className="h-11 w-11 rounded object-cover" />
                 <div>
                   <p className="font-medium">{item.name}</p>
                   <div className="mt-1 flex flex-wrap gap-1">

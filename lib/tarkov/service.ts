@@ -57,8 +57,15 @@ type TaskCacheState = {
   pending: Promise<TarkovTask[]> | null;
 };
 
+type KappaTaskCacheState = {
+  data: TarkovTask[] | null;
+  expiresAt: number;
+  pending: Promise<TarkovTask[]> | null;
+};
+
 const globalForTaskCache = globalThis as unknown as {
   taskCacheState?: TaskCacheState;
+  kappaTaskCacheState?: KappaTaskCacheState;
 };
 
 const taskCacheState =
@@ -71,6 +78,18 @@ const taskCacheState =
 
 if (!globalForTaskCache.taskCacheState) {
   globalForTaskCache.taskCacheState = taskCacheState;
+}
+
+const kappaTaskCacheState =
+  globalForTaskCache.kappaTaskCacheState ??
+  ({
+    data: null,
+    expiresAt: 0,
+    pending: null,
+  } satisfies KappaTaskCacheState);
+
+if (!globalForTaskCache.kappaTaskCacheState) {
+  globalForTaskCache.kappaTaskCacheState = kappaTaskCacheState;
 }
 
 export async function getAllTasks() {
@@ -97,13 +116,94 @@ export async function getAllTasks() {
 }
 
 export async function getTaskById(taskId: string) {
+  try {
+    const row = await db.taskCatalog.findUnique({
+      where: { id: taskId },
+      select: {
+        taskData: true,
+      },
+    });
+
+    if (row?.taskData) {
+      return row.taskData as unknown as TarkovTask;
+    }
+  } catch (error) {
+    console.warn("Task by id fallback to in-memory list", error);
+  }
+
   const tasks = await getAllTasks();
   return tasks.find((task) => task.id === taskId) ?? null;
 }
 
 export async function getKappaTasks() {
+  const now = Date.now();
+  if (kappaTaskCacheState.data && kappaTaskCacheState.expiresAt > now) {
+    return kappaTaskCacheState.data;
+  }
+
+  if (kappaTaskCacheState.pending) {
+    return kappaTaskCacheState.pending;
+  }
+
+  kappaTaskCacheState.pending = (async () => {
+    try {
+      const rows = await db.taskCatalog.findMany({
+        where: {
+          kappaRequired: true,
+        },
+        select: {
+          taskData: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      });
+
+      if (rows.length > 0) {
+        return rows.map((row) => row.taskData as unknown as TarkovTask);
+      }
+    } catch (error) {
+      console.warn("Kappa task query fallback to full task list", error);
+    }
+
+    const tasks = await getAllTasks();
+    return tasks.filter((task) => task.kappaRequired);
+  })()
+    .then((tasks) => {
+      kappaTaskCacheState.data = tasks;
+      kappaTaskCacheState.expiresAt = Date.now() + env.TARKOV_CACHE_REVALIDATE_SECONDS * 1000;
+      return tasks;
+    })
+    .finally(() => {
+      kappaTaskCacheState.pending = null;
+    });
+
+  return kappaTaskCacheState.pending;
+}
+
+export async function getNextTasksByTaskId(taskId: string) {
+  try {
+    const rows = await db.$queryRaw<Array<{ id: string; name: string }>>`
+      SELECT "id", "name"
+      FROM "TaskCatalog"
+      WHERE EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements("taskData"->'taskRequirements') AS requirement
+        WHERE requirement->'task'->>'id' = ${taskId}
+      )
+      ORDER BY "name" ASC
+    `;
+
+    return rows;
+  } catch (error) {
+    console.warn("Next tasks query fallback to in-memory list", error);
+  }
+
   const tasks = await getAllTasks();
-  return tasks.filter((task) => task.kappaRequired);
+  return tasks
+    .filter((candidate) => candidate.taskRequirements.some((requirement) => requirement.task.id === taskId))
+    .map((candidate) => ({ id: candidate.id, name: candidate.name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 async function fetchWeaponsUncached() {
@@ -352,43 +452,247 @@ export async function getFleaDefaultSnapshot(limit = 80) {
   };
 }
 
-export async function getTaskMapAndTraderFacets() {
-  const tasks = await getAllTasks();
-  const traders = new Set<string>();
-  const maps = new Set<string>();
+type TaskFacetCache = {
+  data: { traders: string[]; maps: string[] } | null;
+  expiresAt: number;
+  pending: Promise<{ traders: string[]; maps: string[] }> | null;
+};
 
-  for (const task of tasks) {
-    if (task.trader?.name) {
-      traders.add(task.trader.name);
-    }
-    if (task.map?.name) {
-      maps.add(task.map.name);
-    }
+type SearchIndexCache = {
+  data:
+    | {
+        tasks: Array<{
+          id: string;
+          name: string;
+          trader: string | undefined;
+          map: string | undefined;
+          href: string;
+          type: "task";
+        }>;
+        items: Array<{
+          id: string;
+          name: string;
+          href: string;
+          type: "item";
+        }>;
+      }
+    | null;
+  expiresAt: number;
+  pending: Promise<{
+    tasks: Array<{
+      id: string;
+      name: string;
+      trader: string | undefined;
+      map: string | undefined;
+      href: string;
+      type: "task";
+    }>;
+    items: Array<{
+      id: string;
+      name: string;
+      href: string;
+      type: "item";
+    }>;
+  }> | null;
+};
+
+const globalForTaskFacetCache = globalThis as unknown as {
+  taskFacetCache?: TaskFacetCache;
+};
+
+const taskFacetCache =
+  globalForTaskFacetCache.taskFacetCache ??
+  ({
+    data: null,
+    expiresAt: 0,
+    pending: null,
+  } satisfies TaskFacetCache);
+
+if (!globalForTaskFacetCache.taskFacetCache) {
+  globalForTaskFacetCache.taskFacetCache = taskFacetCache;
+}
+
+const globalForSearchIndexCache = globalThis as unknown as {
+  searchIndexCache?: SearchIndexCache;
+};
+
+const searchIndexCache =
+  globalForSearchIndexCache.searchIndexCache ??
+  ({
+    data: null,
+    expiresAt: 0,
+    pending: null,
+  } satisfies SearchIndexCache);
+
+if (!globalForSearchIndexCache.searchIndexCache) {
+  globalForSearchIndexCache.searchIndexCache = searchIndexCache;
+}
+
+function taskMetaCacheTtlMs() {
+  return Math.min(env.TARKOV_CACHE_REVALIDATE_SECONDS, 900) * 1000;
+}
+
+export async function getTaskMapAndTraderFacets() {
+  const now = Date.now();
+  if (taskFacetCache.data && taskFacetCache.expiresAt > now) {
+    return taskFacetCache.data;
   }
 
-  return {
-    traders: Array.from(traders).sort((a, b) => a.localeCompare(b)),
-    maps: Array.from(maps).sort((a, b) => a.localeCompare(b)),
-  };
+  if (taskFacetCache.pending) {
+    return taskFacetCache.pending;
+  }
+
+  taskFacetCache.pending = (async () => {
+    try {
+      const rows = await db.taskCatalog.findMany({
+        select: {
+          traderName: true,
+          mapName: true,
+        },
+      });
+
+      const traders = new Set<string>();
+      const maps = new Set<string>();
+
+      for (const row of rows) {
+        if (row.traderName) {
+          traders.add(row.traderName);
+        }
+        if (row.mapName) {
+          maps.add(row.mapName);
+        }
+      }
+
+      const result = {
+        traders: Array.from(traders).sort((a, b) => a.localeCompare(b)),
+        maps: Array.from(maps).sort((a, b) => a.localeCompare(b)),
+      };
+
+      taskFacetCache.data = result;
+      taskFacetCache.expiresAt = Date.now() + taskMetaCacheTtlMs();
+      return result;
+    } catch (error) {
+      console.warn("Task facets fallback to full task list", error);
+
+      const tasks = await getAllTasks();
+      const traders = new Set<string>();
+      const maps = new Set<string>();
+
+      for (const task of tasks) {
+        if (task.trader?.name) {
+          traders.add(task.trader.name);
+        }
+        if (task.map?.name) {
+          maps.add(task.map.name);
+        }
+      }
+
+      const fallbackResult = {
+        traders: Array.from(traders).sort((a, b) => a.localeCompare(b)),
+        maps: Array.from(maps).sort((a, b) => a.localeCompare(b)),
+      };
+
+      taskFacetCache.data = fallbackResult;
+      taskFacetCache.expiresAt = Date.now() + taskMetaCacheTtlMs();
+      return fallbackResult;
+    } finally {
+      taskFacetCache.pending = null;
+    }
+  })();
+
+  return taskFacetCache.pending;
 }
 
 export async function getSearchIndex() {
-  const [tasks, weapons] = await Promise.all([getAllTasks(), getWeapons()]);
+  const now = Date.now();
+  if (searchIndexCache.data && searchIndexCache.expiresAt > now) {
+    return searchIndexCache.data;
+  }
 
-  return {
-    tasks: tasks.slice(0, 2000).map((task) => ({
-      id: task.id,
-      name: task.name,
-      trader: task.trader?.name,
-      map: task.map?.name,
-      href: `/tasks/${task.id}`,
-      type: "task" as const,
-    })),
-    items: weapons.slice(0, 300).map((item) => ({
-      id: item.id,
-      name: item.name,
-      href: `/builds/new?weaponId=${item.id}`,
-      type: "item" as const,
-    })),
-  };
+  if (searchIndexCache.pending) {
+    return searchIndexCache.pending;
+  }
+
+  searchIndexCache.pending = (async () => {
+    try {
+      const [taskRows, weaponRows] = await Promise.all([
+        db.taskCatalog.findMany({
+          select: {
+            id: true,
+            name: true,
+            traderName: true,
+            mapName: true,
+          },
+          orderBy: {
+            name: "asc",
+          },
+          take: 2500,
+        }),
+        db.itemCatalog.findMany({
+          where: {
+            typeTags: {
+              has: "gun",
+            },
+          },
+          select: {
+            id: true,
+            name: true,
+          },
+          orderBy: {
+            name: "asc",
+          },
+          take: 500,
+        }),
+      ]);
+
+      const result = {
+        tasks: taskRows.map((task) => ({
+          id: task.id,
+          name: task.name,
+          trader: task.traderName ?? undefined,
+          map: task.mapName ?? undefined,
+          href: `/tasks/${task.id}`,
+          type: "task" as const,
+        })),
+        items: weaponRows.map((item) => ({
+          id: item.id,
+          name: item.name,
+          href: `/builds/new?weaponId=${item.id}`,
+          type: "item" as const,
+        })),
+      };
+
+      searchIndexCache.data = result;
+      searchIndexCache.expiresAt = Date.now() + taskMetaCacheTtlMs();
+      return result;
+    } catch (error) {
+      console.warn("Search index fallback to API task/weapon list", error);
+
+      const [tasks, weapons] = await Promise.all([getAllTasks(), getWeapons()]);
+      const fallbackResult = {
+        tasks: tasks.slice(0, 2000).map((task) => ({
+          id: task.id,
+          name: task.name,
+          trader: task.trader?.name,
+          map: task.map?.name,
+          href: `/tasks/${task.id}`,
+          type: "task" as const,
+        })),
+        items: weapons.slice(0, 300).map((item) => ({
+          id: item.id,
+          name: item.name,
+          href: `/builds/new?weaponId=${item.id}`,
+          type: "item" as const,
+        })),
+      };
+
+      searchIndexCache.data = fallbackResult;
+      searchIndexCache.expiresAt = Date.now() + taskMetaCacheTtlMs();
+      return fallbackResult;
+    } finally {
+      searchIndexCache.pending = null;
+    }
+  })();
+
+  return searchIndexCache.pending;
 }

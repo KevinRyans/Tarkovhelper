@@ -3,6 +3,21 @@ import { TaskProgressStatus, type PrivacySetting, type UserSettings } from "@pri
 import { db } from "@/lib/db";
 import { normalizeTraderLevels, type PlayerContext, type ProgressMaps } from "@/lib/tasks/logic";
 
+export async function getUserTaskStatusMap(userId: string) {
+  const taskProgress = await db.taskProgress.findMany({
+    where: { userId },
+    select: {
+      taskId: true,
+      status: true,
+    },
+  });
+
+  return taskProgress.reduce<Record<string, TaskProgressStatus>>((acc, row) => {
+    acc[row.taskId] = row.status;
+    return acc;
+  }, {});
+}
+
 export async function getUserProgressMaps(userId: string): Promise<ProgressMaps> {
   const [taskProgress, objectiveProgress] = await Promise.all([
     db.taskProgress.findMany({ where: { userId } }),
@@ -22,6 +37,42 @@ export async function getUserProgressMaps(userId: string): Promise<ProgressMaps>
   }, {});
 
   return { statusByTaskId, objectiveDoneByTaskId };
+}
+
+export async function getTaskProgressSnapshot(userId: string, taskId: string) {
+  const [taskProgress, objectiveProgress] = await Promise.all([
+    db.taskProgress.findUnique({
+      where: {
+        userId_taskId: {
+          userId,
+          taskId,
+        },
+      },
+      select: {
+        status: true,
+      },
+    }),
+    db.taskObjectiveProgress.findMany({
+      where: {
+        userId,
+        taskId,
+      },
+      select: {
+        objectiveId: true,
+        done: true,
+      },
+    }),
+  ]);
+
+  const objectiveDoneMap = objectiveProgress.reduce<Record<string, boolean>>((acc, row) => {
+    acc[row.objectiveId] = row.done;
+    return acc;
+  }, {});
+
+  return {
+    status: taskProgress?.status ?? TaskProgressStatus.NOT_STARTED,
+    objectiveDoneMap,
+  };
 }
 
 export async function updateTaskProgress(params: {

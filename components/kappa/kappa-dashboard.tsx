@@ -58,14 +58,17 @@ function difficultyBadge(level: KappaRow["difficulty"]) {
 
 export function KappaDashboard(props: {
   rows: KappaRow[];
-  taskDetailsById: Record<string, KappaTaskDetail>;
   hoardItems: HoardItem[];
   traders: string[];
   maps: string[];
   shareUrl?: string;
   canEdit: boolean;
+  detailUsername?: string;
 }) {
   const [rows, setRows] = useState(props.rows);
+  const [taskDetailsById, setTaskDetailsById] = useState<Record<string, KappaTaskDetail>>({});
+  const [loadingTaskDetailId, setLoadingTaskDetailId] = useState<string | null>(null);
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const [query, setQuery] = useState("");
   const [trader, setTrader] = useState("all");
   const [map, setMap] = useState("all");
@@ -74,6 +77,64 @@ export function KappaDashboard(props: {
   const [modalTaskId, setModalTaskId] = useState<string | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const closeTimerRef = useRef<number | null>(null);
+
+  async function ensureTaskDetails(taskId: string) {
+    if (taskDetailsById[taskId] || loadingTaskDetailId === taskId) {
+      return;
+    }
+
+    setLoadingTaskDetailId(taskId);
+    setDetailErrors((prev) => {
+      if (!prev[taskId]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+
+    const params = new URLSearchParams();
+    if (props.detailUsername) {
+      params.set("username", props.detailUsername);
+    }
+
+    const queryString = params.toString();
+    const endpoint = `/api/tasks/${taskId}/detail${queryString ? `?${queryString}` : ""}`;
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Task detail request failed (${response.status})`);
+      }
+
+      const payload = (await response.json()) as KappaTaskDetail & { status?: TaskStatus };
+
+      setTaskDetailsById((prev) => ({
+        ...prev,
+        [taskId]: {
+          task: payload.task,
+          nextTasks: payload.nextTasks,
+          neededItems: payload.neededItems,
+          objectiveDoneMap: payload.objectiveDoneMap,
+        },
+      }));
+
+      if (payload.status) {
+        setRows((prev) => prev.map((row) => (row.id === taskId ? { ...row, status: payload.status ?? row.status } : row)));
+      }
+    } catch (error) {
+      setDetailErrors((prev) => ({
+        ...prev,
+        [taskId]: error instanceof Error ? error.message : "Failed to load task detail",
+      }));
+    } finally {
+      setLoadingTaskDetailId((current) => (current === taskId ? null : current));
+    }
+  }
 
   function clearCloseTimer() {
     if (closeTimerRef.current !== null) {
@@ -86,6 +147,7 @@ export function KappaDashboard(props: {
     clearCloseTimer();
     setModalTaskId(taskId);
     setModalVisible(false);
+    void ensureTaskDetails(taskId);
     window.requestAnimationFrame(() => {
       setModalVisible(true);
     });
@@ -165,7 +227,7 @@ export function KappaDashboard(props: {
   })();
 
   const selectedRow = modalTaskId ? rows.find((row) => row.id === modalTaskId) : null;
-  const selectedTaskData = modalTaskId ? props.taskDetailsById[modalTaskId] : null;
+  const selectedTaskData = modalTaskId ? taskDetailsById[modalTaskId] : null;
 
   function updateRowStatus(taskId: string, nextStatus: TaskStatus) {
     setRows((prev) => prev.map((row) => (row.id === taskId ? { ...row, status: nextStatus } : row)));
@@ -349,7 +411,14 @@ export function KappaDashboard(props: {
               {props.hoardItems.slice(0, 10).map((item) => (
                 <div key={item.id} className="flex items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Image src={`/api/icons/${item.id}`} alt={item.name} width={28} height={28} unoptimized className="h-7 w-7 rounded object-cover" />
+                    <Image
+                      src={item.iconLink && /^https?:\/\//i.test(item.iconLink) ? item.iconLink : `/api/icons/${item.id}`}
+                      alt={item.name}
+                      width={28}
+                      height={28}
+                      unoptimized
+                      className="h-7 w-7 rounded object-cover"
+                    />
                     <p className="truncate text-sm">{item.name}</p>
                   </div>
                   <Badge variant="neutral">x{item.count}</Badge>
@@ -361,7 +430,7 @@ export function KappaDashboard(props: {
         </div>
       </section>
 
-      {selectedTaskData && selectedRow ? (
+      {selectedRow ? (
         <div
           className={`fixed inset-0 z-50 p-3 transition-opacity duration-200 sm:p-6 ${modalVisible ? "bg-black/70 opacity-100" : "bg-black/0 opacity-0"}`}
           onClick={closeModal}
@@ -393,15 +462,40 @@ export function KappaDashboard(props: {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <TaskDetail
-                task={selectedTaskData.task}
-                nextTasks={selectedTaskData.nextTasks}
-                status={selectedRow.status}
-                objectiveDoneMap={selectedTaskData.objectiveDoneMap}
-                neededItems={selectedTaskData.neededItems}
-                canEdit={props.canEdit}
-                onStatusUpdated={(status) => updateRowStatus(selectedRow.id, status)}
-              />
+              {selectedTaskData ? (
+                <TaskDetail
+                  task={selectedTaskData.task}
+                  nextTasks={selectedTaskData.nextTasks}
+                  status={selectedRow.status}
+                  objectiveDoneMap={selectedTaskData.objectiveDoneMap}
+                  neededItems={selectedTaskData.neededItems}
+                  canEdit={props.canEdit}
+                  onStatusUpdated={(status) => updateRowStatus(selectedRow.id, status)}
+                />
+              ) : (
+                <div className="space-y-3">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Loading task detail...</CardTitle>
+                      <CardDescription>Fetching objectives, rewards and item requirements.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      <p className="text-[var(--muted)]">
+                        {loadingTaskDetailId === selectedRow.id ? "Please wait a moment." : "Detail not loaded yet."}
+                      </p>
+
+                      {detailErrors[selectedRow.id] ? (
+                        <div className="space-y-2">
+                          <p className="text-amber-300">{detailErrors[selectedRow.id]}</p>
+                          <Button size="sm" variant="secondary" onClick={() => void ensureTaskDetails(selectedRow.id)}>
+                            Retry
+                          </Button>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
             </div>
           </div>
         </div>

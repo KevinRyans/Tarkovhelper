@@ -65,6 +65,14 @@ type PlannedBuild = {
 
 const traderNames = ["Prapor", "Therapist", "Skier", "Peacekeeper", "Mechanic", "Ragman", "Jaeger", "Ref"];
 
+function partIconSrc(part: PlannedBuild["parts"][number]) {
+  if (part.iconLink && /^https?:\/\//i.test(part.iconLink)) {
+    return part.iconLink;
+  }
+
+  return `/api/icons/${part.itemId}`;
+}
+
 export function BuildBuilder(props: {
   weapons: WeaponOption[];
   initialConstraints: BuildConstraints;
@@ -362,7 +370,7 @@ export function BuildBuilder(props: {
                   <div key={`${part.slotId}-${part.itemId}`} className="flex items-center justify-between gap-3 rounded-md border border-[var(--border)] bg-[var(--surface-2)] p-2">
                     <div className="flex min-w-0 items-center gap-2">
                       <Image
-                        src={`/api/icons/${part.itemId}`}
+                        src={partIconSrc(part)}
                         alt={part.itemName}
                         width={40}
                         height={40}
