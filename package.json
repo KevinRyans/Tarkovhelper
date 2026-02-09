@@ -13,7 +13,8 @@
     "prisma:studio": "prisma studio",
     "db:sync": "tsx scripts/sync-tarkov.ts",
     "db:prepare": "npm run prisma:generate && npm run db:sync",
-    "invites:seed": "tsx scripts/seed-invite-codes.ts"
+    "invites:seed": "tsx scripts/seed-invite-codes.ts",
+    "security:scan": "node scripts/security-scan.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",

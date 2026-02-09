@@ -131,6 +131,26 @@ npm run dev
 - `npm run db:sync`
 - `npm run db:prepare`
 - `npm run invites:seed`
+- `npm run security:scan`
+
+## Safe Open-Source Release
+
+Before publishing the repository publicly:
+
+1. Rotate production secrets:
+   - `DATABASE_URL`
+   - `NEXTAUTH_SECRET`
+   - `OPENAI_API_KEY` (if used)
+   - Companion tokens
+2. Keep `.env` and `.env.local` local only (never commit).
+3. Run:
+
+```bash
+npm run security:scan
+```
+
+4. Follow `docs/OPEN_SOURCE_RELEASE_CHECKLIST.md`.
+5. Keep `SECURITY.md` and `docs/THREAT_MODEL.md` in sync with implementation.
 
 ## Invite-Only Beta
 
